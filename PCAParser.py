@@ -10,6 +10,7 @@ import csv
 import argparse
 from datetime import datetime
 
+# Format's date and time and strips the last 3 decimals
 def format_timestamp(timestamp_str):
     try:
         dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
@@ -17,15 +18,16 @@ def format_timestamp(timestamp_str):
     except ValueError:
         return timestamp_str
 
+# Parses the PcaAppLaunchDic.txt and converts it to a CSV file
 def Parse_PcaAppLaunchDic(pcaapplaunchTXT, csv_path):
-    print(f"[+] Parsing {os.path.abspath(pcaapplaunchTXT)}")
+    print(f"[+] Parsing - {os.path.abspath(pcaapplaunchTXT)}")
     with open(pcaapplaunchTXT, 'r', encoding='utf-8') as in_file:
         applaunch_lines = in_file.read()
         applaunch_lines = applaunch_lines.splitlines()
 
         FIELDNAMES = ["Execution Time", "File Path"]
 
-        with open(csv_path, 'w', encoding='utf-8') as out_file:
+        with open(csv_path, 'w', newline='', encoding='utf-8') as out_file:
             writer = csv.DictWriter(out_file, fieldnames=FIELDNAMES)
             writer.writeheader()
 
@@ -37,23 +39,24 @@ def Parse_PcaAppLaunchDic(pcaapplaunchTXT, csv_path):
                     "Execution Time": clean_time,
                     "File Path": parts[0]
                 }
-                writer.writerow(row)  
+                writer.writerow(row)
+    # Checks whether the CSV file is created and returns a output with the path
     if(os.path.exists(csv_path)):
-        print(f"[+] Created {os.path.abspath(csv_path)}")
+        print(f"[+] Created - {os.path.abspath(csv_path)}\n")
 
-
+# Parses the PcaGeneralDb*.txt and converts it to a CSV file
 def Parse_PcaGeneralDb(pcaGeneralTXT, csv_path):
-    print(f"[+] Parsing {os.path.abspath(pcaGeneralTXT)}")
+    print(f"[+] Parsing - {os.path.abspath(pcaGeneralTXT)}")
     FIELDNAMES = ["Creation Time", "Record Type", "File Path", "Product Name", "Company Name", "Product Version", "Program ID", "Message"]
 
     RECORD_TYPE_MAP = {
         "0": "Installer failed (0)",
         "1": "Driver was Blocked (1)",
         "2": "Abnormal Process Exit (2)",
-        "3": "PCA Resolve is called"
+        "3": "PCA Resolve is called (3)"
     }
     with open(pcaGeneralTXT, 'r', encoding='utf-16le') as in_file, \
-        open(csv_path, 'w', encoding='utf-8') as out_file:
+        open(csv_path, 'w', newline='', encoding='utf-8') as out_file:
 
             writer = csv.DictWriter(out_file, fieldnames=FIELDNAMES)
             writer.writeheader()
@@ -82,17 +85,70 @@ def Parse_PcaGeneralDb(pcaGeneralTXT, csv_path):
                 }
                 writer.writerow(row)
     if(os.path.exists(csv_path)):
-        print(f"[+] Created {os.path.abspath(csv_path)}")
+        print(f"[+] Created - {os.path.abspath(csv_path)}\n")
 
-def Parse_PCATimeline():
-    return
+# Generates a sorted timeline of the executions from both the txt files (PcaAppLaunchDic and PcaGeneralDb*.txt) and generates a CSV file
+def Parse_PCATimeline(in_folder, out_folder):
+    FIELDNAMES = ["Execution Time", "File Path"]
+    out_file_path = os.path.join(out_folder, "PCATimeline.csv")
+
+    # Mapping of filename to a tuple: (time index, path index)
+    file_parsers = {
+        'PcaAppLaunchDic.txt': (1, 0),
+        'PcaGeneralDb0.txt': (0, 2),
+        'PcaGeneralDb1.txt': (0, 2),
+    }
+
+    # Set encoding per file
+    encoding_map = {
+        'PcaGeneralDb0.txt': 'utf-16le',
+        'PcaGeneralDb1.txt': 'utf-16le',
+        'PcaAppLaunchDic.txt': 'utf-8'
+    }
+
+    all_rows = []
+
+    for filename in os.listdir(in_folder):
+        if filename in file_parsers:
+            file_path = os.path.join(in_folder, filename)
+            if not os.path.isfile(file_path):
+                print(f'[-] New file found: {file_path}')
+                continue
+
+            time_idx, path_idx = file_parsers[filename]
+            with open(file_path, 'r', encoding=encoding_map.get(filename, 'utf-8')) as in_file:
+                for line in in_file:
+                    parts = line.strip().split('|')
+                    if len(parts) > max(time_idx, path_idx):
+                        row = {
+                            "Execution Time": format_timestamp(parts[time_idx]),
+                            "File Path": parts[path_idx]
+                        }
+                        all_rows.append(row)
+    
+    def parse_time(row):
+        try:
+            return datetime.strptime(row["Execution Time"], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return datetime.min
+        
+    all_rows.sort(key=parse_time)
+
+    with open(out_file_path, 'w', newline='', encoding='utf-8') as out_csv:
+        writer = csv.DictWriter(out_csv, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        for row in all_rows:
+            writer.writerow(row)
+
+    if(os.path.exists(out_file_path)):
+        print(f"[+] Created timeline at - {os.path.abspath(out_file_path)}\n")
 
 def PCAParser(input_folder, output_folder):
     if(os.path.exists(output_folder)):
         pass
     elif(output_folder == 'Reports'):
         os.mkdir(output_folder)
-        print(f"[+] Output folder does not exist. Creating the default - '{os.path.abspath(output_folder)}' folder.\n")
+        print(f"[+] Output folder isn't provided. Creating the default - '{os.path.abspath(output_folder)}' folder.\n")
     else:
         print("[+] Output Folder doesn't exist!")
 
@@ -109,6 +165,10 @@ def PCAParser(input_folder, output_folder):
             elif filename == 'PcaGeneralDb1.txt':
                 csv_path = os.path.join(output_folder, "PcaGeneralDb1.csv")
                 Parse_PcaGeneralDb(file_path, csv_path)
+        else:
+            print(f"[-] New file found - {filename}")
+
+    Parse_PCATimeline(input_folder, output_folder)
             
 
 def main():
@@ -127,7 +187,7 @@ def main():
         PCAParser(input_path, output_path)
     elif(not (os.path.exists(output_path))):
         os.mkdir(output_path)
-        print(f"[+] Output folder does not exist. Creating the '{os.path.abspath(output_path)}' folder.\n")
+        print(f"[+] Output folder does not exist. Creating the - '{os.path.abspath(output_path)}' folder.\n")
         PCAParser(input_path, output_path)
     else:
         print(parser.print_help())
