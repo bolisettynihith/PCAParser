@@ -19,7 +19,7 @@ This is a CLI based tool.
 $ python PCAParser.py -i C:\Windows\appcompat\pca
 ```
 
-![Usage](.\img\usage.png)
+![Usage](img\usage.png)
 
 To view help:
 
@@ -27,7 +27,7 @@ To view help:
 $ python PCAParser.py -h
 ```
 
-![help](.\img\help.png)
+![help](img\help.png)
 
 # References
 
